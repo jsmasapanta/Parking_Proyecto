@@ -1,17 +1,20 @@
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Search, User, Mail, IdCard, AtSign, AlertCircle } from 'lucide-react';
+import Card from './Card';
 import {
   buscarPersonaPorCedula,
   buscarPersonaPorUsername,
   buscarPersonasPorApellido,
 } from '../api/personas';
 
-const TIPOS_BUSQUEDA = [
+const TIPOS = [
   { value: 'cedula', label: 'Cédula' },
   { value: 'username', label: 'Username' },
   { value: 'apellido', label: 'Apellido' },
 ];
 
-export default function BuscarPersona() {
+export default function BuscarPersona({ delay }) {
   const [tipo, setTipo] = useState('cedula');
   const [valor, setValor] = useState('');
   const [resultado, setResultado] = useState(null);
@@ -21,17 +24,14 @@ export default function BuscarPersona() {
   async function handleBuscar(e) {
     e.preventDefault();
     if (!valor.trim()) return;
-
     setCargando(true);
     setError(null);
     setResultado(null);
-
     try {
       let data;
       if (tipo === 'cedula') data = await buscarPersonaPorCedula(valor);
       else if (tipo === 'username') data = await buscarPersonaPorUsername(valor);
       else data = await buscarPersonasPorApellido(valor);
-
       setResultado(data);
     } catch (err) {
       setError(err.message);
@@ -40,65 +40,105 @@ export default function BuscarPersona() {
     }
   }
 
-  // findByApellido devuelve un array; las otras dos devuelven un objeto único.
   const personas = Array.isArray(resultado) ? resultado : resultado ? [resultado] : [];
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-lg font-semibold text-gray-800 mb-4">Buscar persona</h2>
-
+    <Card icon={User} title="Buscar persona" accent="violet" delay={delay}>
       <form onSubmit={handleBuscar} className="flex flex-wrap gap-2 mb-4">
-        <select
-          value={tipo}
-          onChange={(e) => setTipo(e.target.value)}
-          className="border border-gray-300 rounded px-3 py-2 text-sm"
-        >
-          {TIPOS_BUSQUEDA.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-
-        <input
-          type="text"
-          value={valor}
-          onChange={(e) => setValor(e.target.value)}
-          placeholder={`Buscar por ${tipo}...`}
-          className="flex-1 min-w-[180px] border border-gray-300 rounded px-3 py-2 text-sm"
-        />
-
-        <button
-          type="submit"
-          disabled={cargando}
-          className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-sm font-medium px-4 py-2 rounded"
-        >
-          {cargando ? 'Buscando...' : 'Buscar'}
-        </button>
-      </form>
-
-      {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 mb-3">
-          {error}
-        </p>
-      )}
-
-      {personas.length > 0 && (
-        <div className="space-y-2">
-          {personas.map((p) => (
-            <div key={p.id} className="border border-gray-200 rounded p-3 text-sm">
-              <p className="font-medium text-gray-800">
-                {p.firstName} {p.middleName} {p.lastName}
-              </p>
-              <p className="text-gray-500">DNI: {p.dni}</p>
-              <p className="text-gray-500">Email: {p.email}</p>
-              {p.usuario && (
-                <p className="text-gray-500">Usuario: {p.usuario.username}</p>
+        <div className="flex rounded-xl bg-slate-100 p-1">
+          {TIPOS.map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() => setTipo(t.value)}
+              className="relative px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors"
+            >
+              {tipo === t.value && (
+                <motion.div
+                  layoutId="tipoPersona"
+                  className="absolute inset-0 bg-white rounded-lg shadow-sm"
+                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                />
               )}
-            </div>
+              <span className={`relative ${tipo === t.value ? 'text-violet-600' : 'text-slate-500'}`}>
+                {t.label}
+              </span>
+            </button>
           ))}
         </div>
-      )}
-    </div>
+
+        <div className="flex-1 flex gap-2 min-w-[200px]">
+          <input
+            type="text"
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+            placeholder={`Buscar por ${tipo}...`}
+            className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent transition-all"
+          />
+          <motion.button
+            type="submit"
+            disabled={cargando}
+            whileTap={{ scale: 0.95 }}
+            className="bg-gradient-to-br from-violet-500 to-purple-600 text-white px-4 py-2.5 rounded-xl shadow-md disabled:opacity-50 flex items-center justify-center min-w-[44px]"
+          >
+            {cargando ? (
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }}
+                className="w-4 h-4 border-2 border-white border-t-transparent rounded-full"
+              />
+            ) : (
+              <Search className="w-4 h-4" strokeWidth={2.5} />
+            )}
+          </motion.button>
+        </div>
+      </form>
+
+      <AnimatePresence mode="wait">
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="flex items-center gap-2 text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-xl px-4 py-3 mb-2"
+          >
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            {error}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="space-y-2">
+        <AnimatePresence>
+          {personas.map((p, i) => (
+            <motion.div
+              key={p.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ delay: i * 0.06 }}
+              className="bg-white/60 border border-slate-100 rounded-xl p-4"
+            >
+              <p className="font-bold text-slate-800 mb-1">
+                {p.firstName} {p.middleName} {p.lastName}
+              </p>
+              <div className="space-y-1 text-xs text-slate-500">
+                <p className="flex items-center gap-2">
+                  <IdCard className="w-3.5 h-3.5" /> <span className="font-mono">{p.dni}</span>
+                </p>
+                <p className="flex items-center gap-2">
+                  <Mail className="w-3.5 h-3.5" /> {p.email}
+                </p>
+                {p.usuario && (
+                  <p className="flex items-center gap-2">
+                    <AtSign className="w-3.5 h-3.5" /> {p.usuario.username}
+                  </p>
+                )}
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+    </Card>
   );
 }
