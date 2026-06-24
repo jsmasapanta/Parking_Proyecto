@@ -84,7 +84,7 @@ export class AsignacionesService {
         return {
           vehicleId: a.vehicleId,
           placa: v.placa,
-          tipo: v.tipo ?? v.discriminator ?? 'desconocido',
+          tipo: this.inferirTipo(v),
           categoria: v.clasificacion ?? v.categoria ?? 'desconocido',
           marca: v.marca,
           modelo: v.modelo,
@@ -150,5 +150,12 @@ export class AsignacionesService {
 
   async findAllTrazabilidad(): Promise<TrazabilidadAsignacion[]> {
     return this.trazabilidadRepo.find({ order: { timestamp: 'DESC' } });
+  }
+
+  private inferirTipo(vehiculo: any): string {
+    if (vehiculo.numeroPuertas !== undefined) return 'Auto';
+    if (vehiculo.capacidadCarga !== undefined) return 'Camioneta';
+    if (vehiculo.tipoMoto !== undefined) return 'Motocicleta';
+    return 'desconocido';
   }
 }
