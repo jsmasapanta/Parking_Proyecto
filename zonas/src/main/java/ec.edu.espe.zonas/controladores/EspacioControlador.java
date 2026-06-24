@@ -4,6 +4,10 @@ import ec.edu.espe.zonas.dtos.EspacioRequestDto;
 import ec.edu.espe.zonas.dtos.EspacioResponseDto;
 import ec.edu.espe.zonas.entidades.EstadoEspacio;
 import ec.edu.espe.zonas.servicios.EspacioServicio;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -13,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
+@Tag(name = "espacios", description = "Espacios físicos individuales dentro de una zona, con su propia máquina de estados (LIBRE, RESERVADO, OCUPADO, MANTENIMIENTO).")
 @RestController
 @RequestMapping("/api/v1/espacios")
 @RequiredArgsConstructor
@@ -20,37 +25,36 @@ public class EspacioControlador {
 
     private final EspacioServicio espacioServicio;
 
-    // GET: Listar todos los espacios
+    @Operation(summary = "Listar todos los espacios de todas las zonas")
     @GetMapping
     public ResponseEntity<List<EspacioResponseDto>> listarEspacios() {
         return ResponseEntity.ok(espacioServicio.obtenerEspacio());
     }
 
-    // POST: Crear un nuevo espacio
+    @Operation(summary = "Crear un nuevo espacio dentro de una zona")
     @PostMapping
     public ResponseEntity<EspacioResponseDto> crearEspacio(@Valid @RequestBody EspacioRequestDto request) {
-        // La lógica del servicio se encargará de forzar que nazca LIBRE
         EspacioResponseDto nuevoEspacio = espacioServicio.crearEspacio(request);
         return new ResponseEntity<>(nuevoEspacio, HttpStatus.CREATED);
     }
 
-    // PATCH: Cambiar el estado (Aquí actúa nuestra máquina de estados)
-    // Ejemplo de uso: /api/v1/espacios/123e4567-e89b-12d3.../estado?nuevoEstado=OCUPADO
+    @Operation(summary = "Cambiar el estado de un espacio (máquina de estados)")
+    @ApiResponse(responseCode = "200", description = "Estado actualizado")
     @PatchMapping("/{idEspacio}/estado")
     public ResponseEntity<EspacioResponseDto> cambiarEstado(
             @PathVariable UUID idEspacio,
             @RequestParam EstadoEspacio nuevoEstado) {
-
-        // Enviamos el cambio al servicio, el cual evaluará si la transición es permitida
         EspacioResponseDto espacioActualizado = espacioServicio.cambiarEstado(idEspacio, nuevoEstado);
         return ResponseEntity.ok(espacioActualizado);
     }
 
-
+    @Operation(summary = "Asignar y ocupar automáticamente un espacio libre de una zona")
+    @ApiResponse(responseCode = "200", description = "Espacio asignado y marcado OCUPADO")
+    @ApiResponse(responseCode = "400", description = "No hay espacios LIBRES disponibles en la zona")
     @PatchMapping("/asignar/{idZona}")
-public ResponseEntity<EspacioResponseDto> asignarEspacioLibre(@PathVariable UUID idZona) {
-    EspacioResponseDto espacioAsignado = espacioServicio.asignarEspacioLibre(idZona);
-    return ResponseEntity.ok(espacioAsignado);
-}
- 
+    public ResponseEntity<EspacioResponseDto> asignarEspacioLibre(
+            @Parameter(example = "2287d61b-a911-4266-8c3a-e7678756102d") @PathVariable UUID idZona) {
+        EspacioResponseDto espacioAsignado = espacioServicio.asignarEspacioLibre(idZona);
+        return ResponseEntity.ok(espacioAsignado);
+    }
 }
