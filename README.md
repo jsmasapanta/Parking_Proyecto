@@ -1,6 +1,6 @@
 # Sistema de Parqueadero — Microservicios Distribuidos
 
-Proyecto de la materia **Aplicaciones Distribuidas** (ESPE). Sistema de gestión de parqueadero compuesto por 4 microservicios independientes, un API Gateway (Kong) y un frontend en React.
+Proyecto de la materia **Aplicaciones Distribuidas** (ESPE). Sistema de gestión de parqueadero compuesto por 5 microservicios independientes, un API Gateway (Kong) y un frontend en React.
 
 **Autores:** Wilmer Buestan, Germán Cáceres, Jefferson Masapanta
 
@@ -20,41 +20,41 @@ Proyecto de la materia **Aplicaciones Distribuidas** (ESPE). Sistema de gestión
                          │  (localhost:8000)     │
                          └──────────┬───────────┘
                                     │
-        ┌──────────────┬───────────┼───────────┬──────────────┐
-        ▼              ▼           ▼           ▼              
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│   personas   │ │  vehiculos   │ │    zonas     │ │   tickets    │
-│  (NestJS)    │ │  (NestJS)    │ │ (Spring Boot)│ │  (NestJS)    │
-│  puerto 3001 │ │  puerto 3002 │ │  puerto 3003 │ │  puerto 3004 │
-└──────────────┘ └──────────────┘ └──────────────┘ └──────┬───────┘
-                                                            │
-                                          tickets-service llama
-                                          directo (sin pasar por Kong)
-                                          a los otros 3 para validar
-                                          y orquestar la emisión de tickets
+     ┌──────────────┬───────────┬───┴───────┬──────────────┬──────────────┐
+     ▼              ▼           ▼           ▼              ▼
+┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐
+│ personas │ │vehiculos │ │  zonas   │ │ tickets  │ │ asignaciones │
+│ (NestJS) │ │ (NestJS) │ │(Spring)  │ │ (NestJS) │ │   (NestJS)   │
+│ :3001    │ │ :3002    │ │ :3003    │ │ :3004    │ │    :3005     │
+│ + JWT    │ │ + JWT    │ │          │ │ + JWT    │ │   + JWT      │
+└──────────┘ └──────────┘ └──────────┘ └────┬─────┘ └──────────────┘
+                                             │
+                               tickets-service llama directo
+                               (sin Kong) a los otros servicios
+                               para orquestar entrada/salida
 ```
 
 **Qué hace cada parte:**
 
-- **personas-service**: gestión de personas y usuarios. Búsqueda por cédula, username, apellido.
-- **vehiculos-service**: gestión de vehículos (Auto, Camioneta, Motocicleta). Búsqueda por placa, disponibilidad.
-- **zonas-service**: gestión de zonas de parqueo y sus espacios individuales (cada espacio tiene su propio estado: LIBRE, OCUPADO, RESERVADO, MANTENIMIENTO).
-- **tickets-service**: el orquestador. Al emitir un ticket de entrada, valida la persona, el vehículo y la zona contra los otros 3 servicios, asigna un espacio libre específico, y guarda el ticket.
-- **Kong**: único punto de entrada externo. El frontend solo conoce la URL de Kong, nunca los puertos individuales de cada microservicio.
-- **Frontend React**: interfaz para emitir tickets, buscar personas/vehículos, ver zonas, y un dashboard de tickets activos.
+- **personas-service**: gestión de personas, usuarios y roles. Autenticación JWT — genera el token en `POST /auth/login`.
+- **vehiculos-service**: gestión de vehículos con herencia de tabla (Auto, Camioneta, Motocicleta). Búsqueda por placa y disponibilidad.
+- **zonas-service**: gestión de zonas de parqueo y espacios individuales (estados: LIBRE / OCUPADO / RESERVADO / MANTENIMIENTO).
+- **tickets-service**: orquestador. Al emitir un ticket de entrada coordina 6 pasos: valida persona, vehículo, zona; asigna espacio; crea el ticket. En la salida calcula la tarifa ($2.50/hora) y libera el espacio.
+- **asignaciones-service**: asignación de vehículos a propietarios (clave compuesta), con auditoría automática por Domain Events.
+- **Kong**: único punto de entrada externo. El frontend solo conoce la URL de Kong.
+- **Frontend React**: dashboard con formularios para tickets, personas, vehículos, zonas y asignaciones.
 
 ---
 
 ## 2. Prerrequisitos (instalar antes de clonar)
 
-Necesitas 5 herramientas: **Node.js**, **Java 21**, **PostgreSQL**, **Docker** y **Git**.
+Necesitas: **Node.js**, **Java 25**, **Docker** y **Git**.
 
 ### 2.1 Node.js (v20 o superior)
 
 **Windows:**
 1. Descarga el instalador desde https://nodejs.org (elige la versión **LTS**).
-2. Ejecuta el instalador, deja todas las opciones por defecto.
-3. Verifica abriendo PowerShell o CMD:
+2. Verifica:
    ```
    node -v
    npm -v
@@ -64,104 +64,49 @@ Necesitas 5 herramientas: **Node.js**, **Java 21**, **PostgreSQL**, **Docker** y
 ```bash
 brew install node
 ```
-(Si no tienes Homebrew, instálalo primero desde https://brew.sh)
 
-**Linux (Ubuntu/Zorin/Debian):**
+**Linux (Ubuntu/Debian):**
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
 sudo apt-get install -y nodejs
 ```
 
-Verifica en cualquier sistema:
-```bash
-node -v   # debe mostrar v20.x.x o superior
-npm -v
-```
+### 2.2 Java 25 (JDK)
 
-### 2.2 Java 21 (JDK)
+Este proyecto usa Java 25. Descarga desde https://adoptium.net o https://jdk.java.net/25/
 
-**Windows:**
-1. Descarga el JDK 21 desde https://adoptium.net/temurin/releases/?version=21
-2. Ejecuta el instalador `.msi`, marca la opción "Set JAVA_HOME variable" si aparece.
-3. Verifica en CMD:
-   ```
-   java -version
-   ```
+**Windows:** ejecuta el instalador `.msi`, activa la opción "Set JAVA_HOME variable".
 
 **Mac:**
 ```bash
-brew install openjdk@21
-echo 'export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
+brew install openjdk@25
 ```
 
 **Linux:**
 ```bash
-sudo apt install openjdk-21-jdk
+sudo apt install openjdk-25-jdk
 ```
 
-Verifica en cualquier sistema:
+Verifica:
 ```bash
-java -version   # debe mostrar version "21.x.x"
+java -version   # debe mostrar version "25.x.x"
 ```
 
-### 2.3 PostgreSQL
+### 2.3 Docker
 
-**Windows:**
-1. Descarga el instalador desde https://www.postgresql.org/download/windows/
-2. Durante la instalación, vas a definir una contraseña para el usuario `postgres` — **anótala**, la vas a necesitar.
-3. Deja el puerto por defecto (5432).
-
-**Mac:**
-```bash
-brew install postgresql@14
-brew services start postgresql@14
-```
-
-**Linux:**
-```bash
-sudo apt install postgresql postgresql-contrib
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
-```
-
-En Linux, después de instalar, define una contraseña para el usuario `postgres`:
-```bash
-sudo -u postgres psql
-ALTER USER postgres PASSWORD 'admin123';
-\q
-```
-
-> **Importante:** este proyecto usa `admin123` como contraseña en los archivos de configuración de ejemplo (`.env`, `application.yaml`). Si usas una contraseña distinta, vas a tener que ajustarla en cada servicio (ver sección 4).
-
-### 2.4 Docker
-
-**Windows:** instala **Docker Desktop** desde https://www.docker.com/products/docker-desktop — requiere WSL2 activado (el instalador te guía si no lo tienes).
-
-**Mac:** instala **Docker Desktop** desde el mismo link de arriba (hay versión para Apple Silicon e Intel).
+**Windows / Mac:** instala **Docker Desktop** desde https://www.docker.com/products/docker-desktop
 
 **Linux:**
 ```bash
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
 ```
-Cierra sesión y vuelve a entrar para que el cambio de grupo tome efecto.
 
-**Verificación universal**, en cualquier sistema, abre Docker Desktop (o en Linux confirma que el servicio esté activo) y corre:
-```bash
-docker ps
-```
-Si no da error de conexión, Docker está listo.
+> ⚠️ **Docker Desktop debe estar ABIERTO** cada vez que uses el proyecto. Ábrelo manualmente antes de levantar el sistema.
 
-> ⚠️ **Docker Desktop debe estar ABIERTO y corriendo** cada vez que quieras usar Kong. No es un servicio que se inicia solo en segundo plano en todos los sistemas — ábrelo manualmente antes de levantar el proyecto.
+### 2.4 Git
 
-### 2.5 Git
-
-**Windows:** descarga desde https://git-scm.com/download/win
-
-**Mac:** ya viene instalado, o `brew install git`
-
-**Linux:** `sudo apt install git`
+**Windows:** https://git-scm.com/download/win | **Mac:** `brew install git` | **Linux:** `sudo apt install git`
 
 ---
 
@@ -172,205 +117,188 @@ git clone https://github.com/WilmerBuestan/Parking_distribuidos.git
 cd Parking_distribuidos
 ```
 
-La estructura que vas a ver:
+Estructura:
 
 ```
 Parking_distribuidos/
-├── backend-personas/    (NestJS, puerto 3001)
-├── vehiculos/            (NestJS, puerto 3002)
-├── zonas/                (Spring Boot, puerto 3003)
-├── tickets-service/      (NestJS, puerto 3004)
-├── kong/                 (configuración del API Gateway)
-├── frontend/             (React + Vite + Tailwind)
-└── levantar-sistema.sh   (script de arranque automático, solo Linux/Mac)
+├── backend-personas/      (NestJS, puerto 3001) — Auth JWT + personas + roles
+├── vehiculos/             (NestJS, puerto 3002)
+├── zonas/                 (Spring Boot, puerto 3003)
+├── tickets-service/       (NestJS, puerto 3004)
+├── asignaciones-service/  (NestJS, puerto 3005) — Asignación y Trazabilidad
+├── kong/                  (configuración del API Gateway)
+├── frontend/              (React + Vite + Tailwind)
+└── levantar-sistema.sh    (script de arranque, solo Linux/Mac)
 ```
 
 ---
 
 ## 4. Configuración inicial (una sola vez)
 
-### 4.1 Crear las 4 bases de datos
+### 4.1 Levantar PostgreSQL con Docker
 
-Conéctate a PostgreSQL y crea las bases de datos que necesita cada servicio:
+Este proyecto usa un contenedor Docker para la base de datos. La primera vez:
 
 ```bash
-psql -U postgres
-```
-(te va a pedir la contraseña que definiste en el paso 2.3)
-
-Dentro de `psql`, ejecuta:
-```sql
-CREATE DATABASE db_personas;
-CREATE DATABASE gestion_vehiculos;
-CREATE DATABASE zonas_db;
-CREATE DATABASE db_tickets;
-\q
+docker run -d --name finanzas_postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=admin123 \
+  -p 5432:5432 \
+  postgres:16
 ```
 
-> Si en tu proyecto local las bases ya tienen otros nombres, ajusta los `.env` de cada servicio para que coincidan (ver siguiente paso).
+Luego crear las 5 bases de datos:
+
+```bash
+docker exec -it finanzas_postgres psql -U postgres -c "CREATE DATABASE db_personas;"
+docker exec -it finanzas_postgres psql -U postgres -c "CREATE DATABASE gestion_vehiculos;"
+docker exec -it finanzas_postgres psql -U postgres -c "CREATE DATABASE zonas_db;"
+docker exec -it finanzas_postgres psql -U postgres -c "CREATE DATABASE db_tickets;"
+docker exec -it finanzas_postgres psql -U postgres -c "CREATE DATABASE db_asignaciones;"
+```
+
+Si ya existe el contenedor de sesiones anteriores, solo arráncalo:
+```bash
+docker start finanzas_postgres
+```
 
 ### 4.2 Crear los archivos `.env`
 
-Cada servicio NestJS necesita su propio archivo `.env` en su carpeta raíz. **Estos archivos NO se suben a Git** (están en `.gitignore` por seguridad), así que cada quien debe crear el suyo.
+**Estos archivos NO se suben a Git** (están en `.gitignore`). Cada quien debe crearlos.
 
 **`backend-personas/.env`:**
 ```env
+PORT=3001
 DB_HOST=localhost
 DB_PORT=5432
 DB_USUARIO=postgres
 DB_CONTRASENA=admin123
 DB_NOMBRE=db_personas
-PORT=3001
+JWT_SECRET=parking_secret_2026
+JWT_EXPIRES_IN=24h
 ```
 
 **`vehiculos/.env`:**
 ```env
+PORT=3002
 DB_HOST=localhost
 DB_PORT=5432
 DB_USUARIO=postgres
 DB_CONTRASENA=admin123
 DB_NOMBRE=gestion_vehiculos
-PORT=3002
+JWT_SECRET=parking_secret_2026
 ```
 
 **`tickets-service/.env`:**
 ```env
 PORT=3004
-
 DB_HOST=localhost
 DB_PORT=5432
 DB_USUARIO=postgres
 DB_CONTRASENA=admin123
 DB_NOMBRE=db_tickets
-
 PERSONAS_SERVICE_URL=http://localhost:3001
 VEHICULOS_SERVICE_URL=http://localhost:3002
 ZONAS_SERVICE_URL=http://localhost:3003
+JWT_SECRET=parking_secret_2026
 ```
 
-> Reemplaza `admin123` por la contraseña real que configuraste en PostgreSQL si es distinta.
+**`asignaciones-service/.env`:**
+```env
+PORT=3005
+DB_HOST=localhost
+DB_PORT=5432
+DB_USUARIO=postgres
+DB_CONTRASENA=admin123
+DB_NOMBRE=db_asignaciones
+PERSONAS_SERVICE_URL=http://localhost:3001
+VEHICULOS_SERVICE_URL=http://localhost:3002
+JWT_SECRET=parking_secret_2026
+```
+
+> El `JWT_SECRET` debe ser **el mismo valor** en todos los servicios. Así cada servicio puede validar tokens generados por personas-service de forma independiente.
 
 ### 4.3 Configurar zonas (Spring Boot)
 
-`zonas` no usa `.env`, usa un archivo YAML que **sí está en el repositorio** (`zonas/src/main/resources/application.yaml`). Revísalo y ajusta usuario/contraseña si los tuyos son distintos a los de ejemplo:
+`zonas` usa `zonas/src/main/resources/application.yaml` (ya incluido en el repo):
 
 ```yaml
 server:
   port: 3003
-
 spring:
-  application:
-    name: zonas-api
   datasource:
     url: jdbc:postgresql://localhost:5432/zonas_db
     username: postgres
     password: admin123
-    driver-class-name: org.postgresql.Driver
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: true
 ```
 
-### 4.4 Instalar dependencias de cada servicio
-
-Desde la raíz del proyecto:
+### 4.4 Instalar dependencias Node.js
 
 ```bash
 cd backend-personas && npm install && cd ..
 cd vehiculos && npm install && cd ..
 cd tickets-service && npm install && cd ..
+cd asignaciones-service && npm install && cd ..
 cd frontend && npm install && cd ..
 ```
-
-`zonas` no necesita este paso — Gradle descarga sus dependencias automáticamente la primera vez que lo ejecutes (siguiente sección).
 
 ---
 
 ## 5. Levantar el sistema completo
 
-Tienes dos formas: **automática** (recomendada, solo Linux/Mac) o **manual** (los 3 sistemas).
+Necesitas **6 terminales** abiertas (una por servicio).
 
-### 5.1 Opción A — Script automático (Linux/Mac)
-
-1. Abre **Docker Desktop** manualmente y espera a que esté listo.
-2. Da permisos de ejecución la primera vez:
-   ```bash
-   chmod +x levantar-sistema.sh
-   ```
-3. Ejecuta:
-   ```bash
-   ./levantar-sistema.sh
-   ```
-
-El script levanta los 4 microservicios y Kong en orden, esperando a que cada uno responda antes de continuar al siguiente. Si Docker no está abierto, te lo va a decir de inmediato en vez de fallar a medias.
-
-> En Windows, este script no es compatible directamente (es bash). Usa la Opción B.
-
-### 5.2 Opción B — Manual (cualquier sistema operativo)
-
-Necesitas **5 terminales abiertas simultáneamente** (una por cada servicio + Kong), o una terminal por pestañas.
-
-**Terminal 1 — personas:**
+**Terminal 1 — personas (con JWT):**
 ```bash
 cd backend-personas
-npm run start
+npm run start:dev
 ```
-Espera a ver `Nest application successfully started`.
+Espera: `Nest application successfully started`
 
 **Terminal 2 — vehiculos:**
 ```bash
 cd vehiculos
-npm run start
+npm run start:dev
 ```
 
-**Terminal 3 — zonas:**
+**Terminal 3 — zonas (Spring Boot):**
 
 Linux/Mac:
 ```bash
-cd zonas
-./gradlew bootRun
+cd zonas && ./gradlew bootRun
 ```
-
-Windows (usa `gradlew.bat`, no `gradlew`):
+Windows:
 ```cmd
 cd zonas
 gradlew.bat bootRun
 ```
-La primera vez tarda más porque descarga dependencias de Gradle. Espera a ver `Started ZonasApplication`.
+Espera: `Started ZonasApplication`
 
 **Terminal 4 — tickets-service:**
 ```bash
 cd tickets-service
-npm run start
+npm run start:dev
 ```
 
-**Terminal 5 — Kong (requiere Docker Desktop abierto):**
+**Terminal 5 — asignaciones-service:**
 ```bash
-cd kong
-docker run -d --name kong-dbless \
-  --add-host=host.docker.internal:host-gateway \
-  -v "$(pwd)/kong.yml:/kong/declarative/kong.yml" \
-  -e "KONG_DATABASE=off" \
-  -e "KONG_DECLARATIVE_CONFIG=/kong/declarative/kong.yml" \
-  -e "KONG_PROXY_ACCESS_LOG=/dev/stdout" \
-  -e "KONG_ADMIN_ACCESS_LOG=/dev/stdout" \
-  -e "KONG_PROXY_ERROR_LOG=/dev/stderr" \
-  -e "KONG_ADMIN_ERROR_LOG=/dev/stderr" \
-  -e "KONG_ADMIN_LISTEN=0.0.0.0:8001" \
-  -p 8000:8000 \
-  -p 8001:8001 \
-  kong:latest
+cd asignaciones-service
+npm run start:dev
 ```
 
-**En Windows (PowerShell o CMD), usa este comando en una sola línea** (Windows no interpreta bien el `\` para continuar línea como Linux/Mac):
-```cmd
-docker run -d --name kong-dbless --add-host=host.docker.internal:host-gateway -v "%cd%/kong.yml:/kong/declarative/kong.yml" -e "KONG_DATABASE=off" -e "KONG_DECLARATIVE_CONFIG=/kong/declarative/kong.yml" -e "KONG_ADMIN_LISTEN=0.0.0.0:8001" -p 8000:8000 -p 8001:8001 kong:latest
+**Terminal 6 — Kong (requiere Docker Desktop abierto):**
+
+Si ya existe el contenedor:
+```bash
+docker start kong-parking
 ```
 
-### 5.3 Levantar el frontend
+Si es la primera vez (Windows PowerShell):
+```powershell
+docker run -d --name kong-parking --add-host=host.docker.internal:host-gateway -v "${PWD}/kong/kong.yml:/kong/declarative/kong.yml" -e "KONG_DATABASE=off" -e "KONG_DECLARATIVE_CONFIG=/kong/declarative/kong.yml" -e "KONG_ADMIN_LISTEN=0.0.0.0:8001" -p 8000:8000 -p 8001:8001 kong:latest
+```
 
-En una terminal adicional:
+**Terminal 7 — Frontend:**
 ```bash
 cd frontend
 npm run dev
@@ -380,20 +308,111 @@ Abre el navegador en **http://localhost:5173**
 
 ---
 
-## 6. Verificar que todo funciona
+## 6. Autenticación JWT
 
-### 6.1 Revisar cada servicio individualmente
+El sistema implementa JWT con validación independiente en cada microservicio (Opción A).
+
+### 6.1 Obtener token
+
+```bash
+POST http://localhost:3001/auth/login
+Content-Type: application/json
+
+{"username": "aparking", "password": "admin123"}
+```
+
+Respuesta:
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "usuario": {
+    "id": "...",
+    "username": "aparking",
+    "roles": ["INVITADO"]
+  }
+}
+```
+
+### 6.2 Usar el token
+
+Incluye el token en el header de cada petición protegida:
+```
+Authorization: Bearer <access_token>
+```
+
+### 6.3 Rutas públicas (sin token — rol invitado)
+
+| Ruta | Descripción |
+|------|-------------|
+| `POST /auth/login` | Iniciar sesión |
+| `POST /personas` | Registrar persona |
+| `GET /personas/cedula/:c` | Buscar por cédula |
+| `GET /personas/:id` | Buscar por ID |
+| `GET /vehiculos` | Listar vehículos |
+| `GET /vehiculos/placa/:p` | Buscar por placa |
+| `GET /vehiculos/:id` | Buscar por ID |
+| `POST /tickets/entrada` | Registrar entrada al parqueadero |
+| `PATCH /tickets/salida/:id` | Procesar salida |
+| `GET /tickets/:id` | Ver detalle de ticket |
+| `GET /asignaciones/propietario/:id` | Consultar flota propia |
+
+### 6.4 Rutas protegidas (requieren Bearer token)
+
+| Ruta | Descripción |
+|------|-------------|
+| `GET /personas` | Lista completa de personas |
+| `POST /vehiculos` | Registrar vehículo |
+| `PATCH/DELETE /vehiculos/:id` | Modificar/eliminar vehículo |
+| `GET /tickets/activos` | Dashboard de tickets activos |
+| `POST /asignaciones` | Asignar vehículo a propietario |
+| `GET /asignaciones/trazabilidad` | Auditoría completa |
+| `PATCH/DELETE /asignaciones` | Modificar/eliminar asignación |
+| `GET/POST /roles` | Gestión de roles |
+
+---
+
+## 7. Microservicio de Asignación y Trazabilidad
+
+Cumple los 3 requisitos funcionales de la evaluación:
+
+### RF1 — Clave compuesta
+La entidad `AsignacionVehiculo` usa `(user_id, vehicle_id)` como clave primaria compuesta con `@PrimaryColumn`.
+
+```
+POST /asignaciones
+Body: { "userId": "...", "vehicleId": "..." }
+```
+
+### RF2 — Auditoría automática por Domain Events
+Al crear, modificar o eliminar una asignación, el servicio emite un evento desacoplado. El `TrazabilidadListener` lo captura y guarda el registro automáticamente sin que el servicio lo llame directamente.
+
+```
+GET /asignaciones/trazabilidad               → historial completo
+GET /asignaciones/{userId}/{vehicleId}/trazabilidad → historial específico
+```
+
+Cada registro incluye: `tipoAccion` (CREACION/MODIFICACION/ELIMINACION), `timestamp`, `datosAnteriores`, `datosNuevos`.
+
+### RF3 — Consulta de flota por propietario
+Retorna todos los vehículos asignados a un propietario, enriquecidos con datos del propietario (via personas-service) y tipo inferido de cada vehículo.
+
+```
+GET /asignaciones/propietario/{userId}
+```
+
+---
+
+## 8. Verificar que todo funciona
 
 | Servicio | URL de verificación |
 |---|---|
-| personas | http://localhost:3001/personas |
-| vehiculos | http://localhost:3002/vehiculos |
+| personas (público) | http://localhost:3001/personas/cedula/9999999999 |
+| vehiculos (público) | http://localhost:3002/vehiculos |
 | zonas | http://localhost:3003/zonas |
-| tickets-service | http://localhost:3004/tickets/activos |
+| tickets | http://localhost:3004/tickets/activos *(requiere token)* |
+| asignaciones | http://localhost:3005/asignaciones/trazabilidad *(requiere token)* |
 
-Cada una debería devolver un JSON (puede estar vacío `[]` si no hay datos aún, eso es normal).
-
-### 6.2 Revisar la documentación interactiva (Swagger)
+### Swagger (documentación interactiva)
 
 | Servicio | URL de Swagger |
 |---|---|
@@ -401,30 +420,40 @@ Cada una debería devolver un JSON (puede estar vacío `[]` si no hay datos aún
 | vehiculos | http://localhost:3002/api/docs |
 | zonas | http://localhost:3003/swagger-ui.html |
 | tickets-service | http://localhost:3004/api/docs |
+| asignaciones | http://localhost:3005/api/docs |
 
-### 6.3 Revisar Kong
+### Kong
 
 ```bash
-curl http://localhost:8000/api/personas
+curl http://localhost:8000/api/personas/cedula/9999999999
 ```
-Debería devolver lo mismo que el puerto 3001 directo, pero pasando por Kong.
-
-### 6.4 Revisar el frontend
-
-Abre http://localhost:5173 — deberías ver el dashboard completo: formulario de emisión de ticket, búsqueda de persona, búsqueda de vehículo, tickets activos, y listado de zonas.
 
 ---
 
-## 7. Problemas comunes (troubleshooting)
+## 9. Flujo de prueba completo
+
+1. **Registrar persona:** `POST /personas` con `{ firstName, lastName, dni, email, password }`
+2. **Login:** `POST /auth/login` → guardar el `access_token`
+3. **Registrar vehículo** (con token): `POST /vehiculos`
+4. **Asignar vehículo a propietario** (con token): `POST /asignaciones`
+5. **Consultar flota** (sin token): `GET /asignaciones/propietario/{userId}`
+6. **Crear zona y espacios:** via Swagger de zonas
+7. **Ticket de entrada** (sin token): `POST /tickets/entrada` con `{ cedula, placa, zonaId }`
+8. **Ticket de salida** (sin token): `PATCH /tickets/salida/{ticketId}`
+9. **Ver trazabilidad** (con token): `GET /asignaciones/trazabilidad`
+
+---
+
+## 10. Problemas comunes
+
+### "Token no proporcionado" (401)
+Falta el header `Authorization: Bearer <token>`. Obtén un token con `POST /auth/login` primero.
+
+### "ECONNREFUSED" al arrancar
+El contenedor de PostgreSQL no está corriendo. Ejecuta: `docker start finanzas_postgres`
 
 ### "EADDRINUSE: address already in use"
-Algún servicio quedó corriendo de una sesión anterior. Libera el puerto:
-
-**Linux/Mac:**
-```bash
-lsof -i :3001        # reemplaza 3001 por el puerto que falle
-kill -9 <PID>
-```
+Algún servicio quedó corriendo. Libera el puerto:
 
 **Windows:**
 ```cmd
@@ -432,58 +461,27 @@ netstat -ano | findstr :3001
 taskkill /PID <PID> /F
 ```
 
-### "Cannot connect to the Docker daemon"
-Docker Desktop no está abierto. Ábrelo manualmente y espera unos 20-30 segundos antes de reintentar.
-
-### Errores de CORS en la consola del navegador
-Kong necesita el plugin CORS configurado en `kong/kong.yml` (ya viene incluido en este repo). Si lo modificaste, reinicia el contenedor:
+**Linux/Mac:**
 ```bash
-docker restart kong-dbless
+lsof -i :3001 | kill -9 $(lsof -ti:3001)
 ```
 
-### El contenedor Kong ya existe (conflicto de nombre)
-Si ya creaste `kong-dbless` antes y solo necesitas volver a levantarlo:
+### Kong: contenedor ya existe
 ```bash
-docker start kong-dbless
+docker start kong-parking
 ```
-En vez de volver a correr `docker run` (que falla si el nombre ya existe).
 
-### Kong no puede comunicarse con los microservicios (Linux específicamente)
-En algunas configuraciones de Linux con firewall activo, el tráfico de Docker hacia el host puede bloquearse. Si Kong da timeout en todas las rutas:
-```bash
-sudo iptables -I DOCKER-USER -s 172.17.0.0/16 -d 172.17.0.1 -p tcp -m multiport --dports 3001,3002,3003,3004 -j ACCEPT
-```
-(Esta regla no es permanente, se pierde al reiniciar la máquina — hay que repetirla cada vez si ocurre, o configurarla en un script de inicio del sistema.)
-
-### Spring Boot (zonas) no compila / springdoc falla
-Este proyecto usa Spring Boot 4.x, que requiere específicamente `springdoc-openapi-starter-webmvc-ui` versión **3.0.3 o superior** (versiones 2.x son para Spring Boot 3 y no son compatibles). Ya está fijado en `build.gradle`, no debería requerir cambios.
+### Spring Boot (zonas) no compila
+Este proyecto requiere Java 25. Verifica con `java -version`. Si tienes otra versión instalada, ajusta `javaVersion` en `zonas/build.gradle`.
 
 ---
 
-## 8. Flujo de prueba sugerido
-
-Para confirmar que todo el sistema funciona de extremo a extremo, en este orden:
-
-1. Crea una persona desde `POST /personas` (puedes usar Swagger UI directamente, botón "Try it out").
-2. Crea un vehículo desde `POST /vehiculos`.
-3. Verifica que exista al menos una zona con espacios `LIBRE` desde `GET /zonas`.
-4. Desde el frontend (`localhost:5173`), llena el formulario "Emitir ticket de entrada" con la cédula y placa que creaste, elige una zona, y emite el ticket.
-5. Verifica en el dashboard "Tickets activos" que aparezca.
-6. Dale click a "Registrar salida" y confirma que el ticket se cierre con tarifa calculada.
-
----
-
-## 9. Apagar el sistema
-
-Para detener todo:
+## 11. Apagar el sistema
 
 ```bash
-# Detener los procesos de Node (Ctrl+C en cada terminal, o):
-# Linux/Mac:
-lsof -ti:3001,3002,3004 | xargs kill -9
+# Detener servicios Node (Ctrl+C en cada terminal)
 
-# Detener zonas (Ctrl+C en su terminal)
-
-# Detener Kong (se mantiene creado, solo se detiene):
-docker stop kong-dbless
+# Detener contenedores Docker:
+docker stop finanzas_postgres
+docker stop kong-parking
 ```

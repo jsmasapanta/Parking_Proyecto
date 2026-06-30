@@ -7,24 +7,33 @@ import {
   Param,
   Delete,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { PersonasService } from './personas.service';
 import { CreatePersonaDto } from './dto/create-persona.dto';
 import { UpdatePersonaDto } from './dto/update-persona.dto';
+import { Public } from '../auth/decorators/public.decorator';
+
+@ApiTags('personas')
 @Controller('personas')
 export class PersonasController {
   constructor(private readonly personasService: PersonasService) {}
 
+  @Public()
   @Post()
+  @ApiOperation({ summary: 'Registrar nueva persona (público)' })
   create(@Body() createPersonaDto: CreatePersonaDto) {
     return this.personasService.create(createPersonaDto);
   }
 
   @Get()
+  @ApiOperation({ summary: 'Listar todas las personas (requiere token)' })
   findAll() {
     return this.personasService.findAll();
   }
 
+  @Public()
   @Get('cedula/:cedula')
+  @ApiOperation({ summary: 'Buscar por cédula (público — usado por tickets-service)' })
   findByCedula(@Param('cedula') cedula: string) {
     return this.personasService.findByCedula(cedula);
   }
@@ -39,7 +48,9 @@ export class PersonasController {
     return this.personasService.findByApellido(apellido);
   }
 
+  @Public()
   @Get(':id')
+  @ApiOperation({ summary: 'Buscar persona por ID (público — usado por asignaciones-service)' })
   findOne(@Param('id') id: string) {
     return this.personasService.findOne(id);
   }
@@ -59,7 +70,6 @@ export class PersonasController {
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    // Quitamos el '+' para que pase el UUID como string
     return this.personasService.remove(id);
   }
 }

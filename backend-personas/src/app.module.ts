@@ -1,10 +1,13 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PersonasModule } from './personas/personas.module';
 import { RolesModule } from './roles/roles.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: 'localhost',
@@ -12,9 +15,10 @@ import { RolesModule } from './roles/roles.module';
       username: 'postgres',
       password: 'admin123',
       database: 'db_personas',
-      autoLoadEntities: true, // Carga automáticamente las entidades registradas en los módulos
-      synchronize: true, // IMPORTANTE: En desarrollo crea y actualiza las tablas automáticamente
+      autoLoadEntities: true,
+      synchronize: true,
     }),
+    AuthModule,
     PersonasModule,
     RolesModule,
   ],

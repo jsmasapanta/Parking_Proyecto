@@ -1,0 +1,159 @@
+================================================================
+  SISTEMA DE PARQUEADERO - RESUMEN PARA DEFENSA
+  Aplicaciones Distribuidas - ESPE
+  Autores: Wilmer Buestan, Germán Cáceres, Jefferson Masapanta
+================================================================
+
+1. ARQUITECTURA GENERAL
+-----------------------
+Sistema de microservicios para gestión de parqueadero con 5 servicios
+independientes comunicados a través de Kong API Gateway.
+
+Servicios:
+  - backend-personas  (NestJS, puerto 3001) → personas, usuarios, roles, JWT
+  - vehiculos         (NestJS, puerto 3002) → registro de vehículos (Auto/Camioneta/Moto)
+  - zonas             (Spring Boot, puerto 3003) → zonas y espacios de parqueo
+  - tickets-service   (NestJS, puerto 3004) → orquestador de entrada/salida
+  - asignaciones      (NestJS, puerto 3005) → asignación y trazabilidad de vehículos
+  - Kong              (Docker, puerto 8000) → API Gateway, punto de entrada único
+  - Frontend          (React/Vite, puerto 5173)
+  - PostgreSQL        (Docker, puerto 5432) → 5 bases de datos independientes
+
+2. PATRONES IMPLEMENTADOS
+--------------------------
+- Factory + Table Inheritance: vehiculos usa herencia de tabla para Auto/Camioneta/Motocicleta
+- State Machine: espacios de parqueo con estados LIBRE/OCUPADO/RESERVADO/MANTENIMIENTO
+- Orchestrator: tickets-service coordina 6 pasos atómicos para emitir/cerrar tickets
+- Domain Events: asignaciones usa @nestjs/event-emitter para auditoría automática desacoplada
+- Composite Primary Key: AsignacionVehiculo usa (user_id + vehicle_id) como clave compuesta
+- API Gateway (DBless): Kong en modo declarativo sin base de datos propia
+
+3. MICROSERVICIO DE ASIGNACIÓN Y TRAZABILIDAD (asignaciones-service)
+---------------------------------------------------------------------
+Cumple 3 requisitos funcionales del PDF de evaluación:
+
+RF1 - Clave compuesta:
+  Entidad AsignacionVehiculo con PK compuesta (user_id + vehicle_id).
+  Endpoint: POST /asignaciones
+
+RF2 - Auditoría automática por Domain Events:
+  Al crear/modificar/eliminar una asignación, el servicio emite un evento
+  (asignacion.creada / asignacion.modificada / asignacion.eliminada).
+  El TrazabilidadListener captura el evento y guarda automáticamente el registro
+  con datos anteriores y nuevos en JSONB.
+  Endpoint: GET /asignaciones/trazabilidad
+  Endpoint: GET /asignaciones/{userId}/{vehicleId}/trazabilidad
+
+RF3 - Consulta de flota por propietario:
+  Consulta todos los vehículos asignados a un propietario. Enriquece la respuesta
+  con datos del propietario (via personas-service) y datos de cada vehículo
+  (via vehiculos-service). Infiere el tipo (Auto/Camioneta/Motocicleta) desde
+  los campos únicos del vehículo.
+  Endpoint: GET /asignaciones/propietario/{userId}
+
+4. AUTENTICACIÓN JWT (backend-personas)
+----------------------------------------
+Implementación: Opción A — cada microservicio valida el JWT de forma independiente.
+
+Flujo:
+  1. Cliente llama POST /auth/login con username + password
+  2. backend-personas valida credenciales con bcrypt
+  3. Genera JWT firmado con secreto compartido (parking_secret_2026)
+  4. Payload del token: { sub, username, roles, dni }
+  5. Cliente incluye token en cabecera: Authorization: Bearer <token>
+  6. Cada servicio tiene un JwtAuthGuard global que valida el token
+
+Rol invitado (sin login requerido):
+  Rutas marcadas con @Public() son accesibles sin token:
+  - POST /auth/login               → iniciar sesión
+  - POST /personas                 → registrarse
+  - GET  /personas/cedula/:c       → buscar persona (usado por tickets)
+  - GET  /personas/:id             → buscar persona (usado por asignaciones)
+  - GET  /vehiculos                → listar vehículos
+  - GET  /vehiculos/placa/:p       → buscar por placa
+  - GET  /vehiculos/:id            → buscar por ID
+  - POST /tickets/entrada          → registrar entrada (kiosco)
+  - PATCH /tickets/salida/:id      → registrar salida (kiosco)
+  - GET  /tickets/:id              → ver ticket
+  - GET  /asignaciones/propietario/:id → consultar flota propia
+
+Rutas protegidas (requieren Bearer token):
+  - GET  /personas                 → lista completa (admin)
+  - POST /vehiculos                → registrar vehículo (admin)
+  - PATCH/DELETE /vehiculos/:id    → modificar/eliminar (admin)
+  - GET  /tickets/activos          → dashboard de tickets (admin)
+  - POST /asignaciones             → asignar vehículo (admin)
+  - GET  /asignaciones/trazabilidad → auditoría completa (admin)
+  - PATCH/DELETE /asignaciones     → modificar/eliminar asignación (admin)
+  - GET/POST /roles                → gestión de roles (admin)
+
+5. FLUJO DE TICKETS (orquestador)
+-----------------------------------
+Entrada (POST /tickets/entrada):
+  Paso 1: Validar persona existe en personas-service (por cédula)
+  Paso 2: Validar vehículo existe en vehiculos-service (por placa)
+  Paso 3: Verificar vehículo no está ya en parqueadero
+  Paso 4: Buscar zona con espacio LIBRE en zonas-service
+  Paso 5: Marcar espacio como OCUPADO
+  Paso 6: Crear ticket con timestamp de entrada
+
+Salida (PATCH /tickets/salida/:id):
+  Paso 1: Obtener ticket activo
+  Paso 2: Calcular tiempo estacionado
+  Paso 3: Calcular tarifa ($2.50/hora proporcional al minuto)
+  Paso 4: Liberar espacio (OCUPADO → LIBRE) en zonas-service
+  Paso 5: Actualizar estado vehículo en vehiculos-service
+  Paso 6: Cerrar ticket con monto calculado
+
+6. BASES DE DATOS
+------------------
+  db_personas      → users, personas, roles, user_role
+  gestion_vehiculos → vehiculo (tabla con discriminador para herencia)
+  zonas_db         → zona, espacio
+  db_tickets       → ticket
+  db_asignaciones  → asignaciones_vehiculos, trazabilidad_asignaciones
+
+7. KONG API GATEWAY (DBless)
+------------------------------
+Configuración declarativa en kong/kong.yml. Rutas expuestas:
+  /api/personas      → http://host.docker.internal:3001/personas
+  /api/vehiculos     → http://host.docker.internal:3002/vehiculos
+  /api/zonas         → http://host.docker.internal:3003/zonas
+  /api/espacios      → http://host.docker.internal:3003/espacios
+  /api/tickets       → http://host.docker.internal:3004/tickets
+  /api/asignaciones  → http://host.docker.internal:3005/asignaciones
+
+8. SWAGGER (documentación interactiva)
+----------------------------------------
+  personas:     http://localhost:3001/api/docs
+  vehiculos:    http://localhost:3002/api/docs
+  zonas:        http://localhost:3003/swagger-ui.html
+  tickets:      http://localhost:3004/api/docs
+  asignaciones: http://localhost:3005/api/docs
+
+9. ARRANQUE RÁPIDO
+-------------------
+Requisitos: Docker Desktop abierto, Node.js, Java 25
+
+  Terminal 1:  cd backend-personas  && npm run start:dev
+  Terminal 2:  cd vehiculos          && npm run start:dev
+  Terminal 3:  cd zonas              && gradlew.bat bootRun  (Windows)
+  Terminal 4:  cd tickets-service    && npm run start:dev
+  Terminal 5:  cd asignaciones-service && npm run start:dev
+  Terminal 6:  docker start kong-parking  (o finanzas_postgres para BD)
+
+10. PRUEBA RÁPIDA JWT
+----------------------
+  # Obtener token
+  POST http://localhost:3001/auth/login
+  Body: {"username":"aparking","password":"admin123"}
+
+  # Usar token
+  GET http://localhost:3001/personas
+  Header: Authorization: Bearer <token>
+
+  # Ruta pública (sin token)
+  GET http://localhost:3002/vehiculos  → 200 OK sin token
+  POST http://localhost:3004/tickets/entrada → 200 OK sin token
+
+================================================================
