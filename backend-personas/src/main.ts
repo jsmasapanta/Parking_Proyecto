@@ -1,10 +1,19 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  const config = app.get(ConfigService);
+  const required = ['JWT_SECRET', 'JWT_REFRESH_SECRET'];
+  for (const key of required) {
+    if (!config.get<string>(key)) {
+      throw new Error(`Variable de entorno requerida no definida: ${key}`);
+    }
+  }
 
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }),

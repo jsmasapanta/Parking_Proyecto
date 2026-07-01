@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Post, Request } from '@nestjs/common';
 import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { Public } from './decorators/public.decorator';
@@ -9,6 +9,7 @@ class RefreshDto {
   @ApiProperty({ description: 'Refresh token obtenido en el login' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(512)
   refresh_token: string;
 }
 
