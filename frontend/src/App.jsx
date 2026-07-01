@@ -1,14 +1,44 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { CircleParking, Server } from 'lucide-react';
+import { CircleParking, Server, LogOut } from 'lucide-react';
 import BuscarPersona from './components/BuscarPersona';
 import BuscarVehiculo from './components/BuscarVehiculo';
 import ListaZonas from './components/ListaZonas';
 import EmitirTicket from './components/EmitirTicket';
 import TicketsActivos from './components/TicketsActivos';
+import LoginForm from './components/LoginForm';
+import { isAuthenticated, logout } from './api/auth';
 
 function App() {
+  const [autenticado, setAutenticado] = useState(isAuthenticated());
+  const [usuario, setUsuario] = useState(null);
   const [refrescoTickets, setRefrescoTickets] = useState(0);
+
+  useEffect(() => {
+    function handleForzarLogout() {
+      setAutenticado(false);
+      setUsuario(null);
+    }
+    window.addEventListener('auth:logout', handleForzarLogout);
+    return () => window.removeEventListener('auth:logout', handleForzarLogout);
+  }, []);
+
+  if (!autenticado) {
+    return (
+      <LoginForm
+        onLogin={(u) => {
+          setUsuario(u);
+          setAutenticado(true);
+        }}
+      />
+    );
+  }
+
+  function handleLogout() {
+    logout();
+    setAutenticado(false);
+    setUsuario(null);
+  }
 
   function handleTicketCreado() {
     setRefrescoTickets((n) => n + 1);
@@ -43,16 +73,38 @@ function App() {
             </div>
           </div>
 
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.3 }}
-            className="hidden sm:flex items-center gap-2 glass rounded-full px-4 py-2 shadow-sm"
-          >
-            <Server className="w-3.5 h-3.5 text-emerald-500" />
-            <span className="text-xs font-semibold text-slate-600">4 microservicios</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-live" />
-          </motion.div>
+          <div className="flex items-center gap-3">
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 }}
+              className="hidden sm:flex items-center gap-2 glass rounded-full px-4 py-2 shadow-sm"
+            >
+              <Server className="w-3.5 h-3.5 text-emerald-500" />
+              <span className="text-xs font-semibold text-slate-600">4 microservicios</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-live" />
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.4 }}
+              className="flex items-center gap-2 glass rounded-full px-3 py-2 shadow-sm"
+            >
+              {usuario && (
+                <span className="text-xs font-semibold text-slate-600 hidden sm:block">
+                  {usuario.username}
+                </span>
+              )}
+              <button
+                onClick={handleLogout}
+                title="Cerrar sesión"
+                className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-red-500 transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </motion.div>
+          </div>
         </motion.header>
 
         {/* Grid principal */}

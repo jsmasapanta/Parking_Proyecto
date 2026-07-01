@@ -16,6 +16,14 @@ _format_version: "3.0"
 #   GET http://host.docker.internal:3001/personas/cedula/1712345678   ✓ correcto
 
 services:
+  - name: auth-service
+    url: http://host.docker.internal:3001/auth
+    routes:
+      - name: auth-route
+        paths:
+          - /api/auth
+        strip_path: true
+
   - name: personas-service
     url: http://host.docker.internal:3001/personas
     routes:
