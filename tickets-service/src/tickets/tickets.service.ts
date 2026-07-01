@@ -82,8 +82,7 @@ export class TicketsService {
       );
     }
 
-    // 4. Asignar y ocupar un espacio específico DENTRO de la zona
-    // Se hace ANTES de crear el ticket: si esto falla, no queda un ticket huérfano sin espacio real.
+    // 4. Asignar espacio dentro de la zona
     let espacioAsignado: { id: string };
     try {
       const res = await firstValueFrom(
@@ -98,12 +97,13 @@ export class TicketsService {
       );
     }
 
-    // 5. Crear el ticket, ya con el espacio confirmado y ocupado
+    // 5. Crear el ticket con el espacio confirmado
     const ticket = this.ticketRepository.create({
       cedula: dto.cedula,
       placa: dto.placa,
       zonaId: dto.zonaId,
       espacioId: espacioAsignado.id,
+      idEmpleado: dto.idEmpleado ?? null,
       horaEntrada: new Date(),
       estado: EstadoTicket.ABIERTO,
     });
@@ -121,48 +121,43 @@ export class TicketsService {
     return ticketGuardado;
   }
 
-  async procesarSalida(ticketId: string): Promise<Ticket> {
+  async procesarSalida(ticketId: string, idEmpleado?: string): Promise<Ticket> {
     const ticket = await this.ticketRepository.findOne({
       where: { id: ticketId },
     });
 
-    if (!ticket) {
-      throw new NotFoundException(`Ticket ${ticketId} no encontrado`);
-    }
+    if (!ticket) throw new NotFoundException(`Ticket ${ticketId} no encontrado`);
 
-    if (ticket.estado === EstadoTicket.CERRADO) {
-      throw new BadRequestException(`El ticket ${ticketId} ya está cerrado`);
+    if (ticket.estado !== EstadoTicket.ABIERTO) {
+      throw new BadRequestException(
+        `El ticket ${ticketId} ya fue ${ticket.estado.toLowerCase()}`,
+      );
     }
 
     const horaSalida = new Date();
     const diffMs = horaSalida.getTime() - ticket.horaEntrada.getTime();
     const tiempoMinutos = Math.ceil(diffMs / 60000);
 
-    // Obtener tarifa de la zona
     let tarifaPorHora = 1.0;
     try {
       const res = await firstValueFrom(
         this.httpService.get(`${this.zonasUrl}/zonas/${ticket.zonaId}`),
       );
-      if (res.data?.tarifaPorHora) {
-        tarifaPorHora = res.data.tarifaPorHora;
-      }
+      if (res.data?.tarifaPorHora) tarifaPorHora = res.data.tarifaPorHora;
     } catch {
-      // Si no se puede obtener la tarifa, se usa el valor por defecto
+      // usar tarifa por defecto
     }
 
-    const tarifaTotal = parseFloat(
-      ((tiempoMinutos / 60) * tarifaPorHora).toFixed(2),
-    );
+    const tarifaTotal = parseFloat(((tiempoMinutos / 60) * tarifaPorHora).toFixed(2));
 
     ticket.horaSalida = horaSalida;
     ticket.tiempoMinutos = tiempoMinutos;
     ticket.tarifaTotal = tarifaTotal;
-    ticket.estado = EstadoTicket.CERRADO;
+    ticket.estado = EstadoTicket.PAGADO;
+    ticket.idEmpleado = idEmpleado ?? ticket.idEmpleado;
 
     const ticketCerrado = await this.ticketRepository.save(ticket);
 
-    // Liberar el vehículo en el servicio de vehículos
     await firstValueFrom(
       this.httpService.patch(
         `${this.vehiculosUrl}/vehiculos/placa/${ticket.placa}/estado-parqueo`,
@@ -170,7 +165,6 @@ export class TicketsService {
       ),
     ).catch(() => null);
 
-    // Liberar el espacio específico ocupado, simétrico a la asignación en crearEntrada
     if (ticket.espacioId) {
       await firstValueFrom(
         this.httpService.patch(
@@ -182,6 +176,44 @@ export class TicketsService {
     return ticketCerrado;
   }
 
+  async anularTicket(ticketId: string, idEmpleado?: string): Promise<Ticket> {
+    const ticket = await this.ticketRepository.findOne({
+      where: { id: ticketId },
+    });
+
+    if (!ticket) throw new NotFoundException(`Ticket ${ticketId} no encontrado`);
+
+    if (ticket.estado !== EstadoTicket.ABIERTO) {
+      throw new BadRequestException(
+        `Solo se pueden anular tickets ABIERTOS. Estado actual: ${ticket.estado}`,
+      );
+    }
+
+    ticket.estado = EstadoTicket.ANULADO;
+    ticket.idEmpleado = idEmpleado ?? ticket.idEmpleado;
+    ticket.horaSalida = new Date();
+
+    const ticketAnulado = await this.ticketRepository.save(ticket);
+
+    // Liberar vehículo y espacio
+    await firstValueFrom(
+      this.httpService.patch(
+        `${this.vehiculosUrl}/vehiculos/placa/${ticket.placa}/estado-parqueo`,
+        { enParqueadero: false },
+      ),
+    ).catch(() => null);
+
+    if (ticket.espacioId) {
+      await firstValueFrom(
+        this.httpService.patch(
+          `${this.zonasUrl}/api/v1/espacios/${ticket.espacioId}/estado?nuevoEstado=LIBRE`,
+        ),
+      ).catch(() => null);
+    }
+
+    return ticketAnulado;
+  }
+
   async findActivos(): Promise<Ticket[]> {
     return this.ticketRepository.find({
       where: { estado: EstadoTicket.ABIERTO },
@@ -191,9 +223,7 @@ export class TicketsService {
 
   async findOne(id: string): Promise<Ticket> {
     const ticket = await this.ticketRepository.findOne({ where: { id } });
-    if (!ticket) {
-      throw new NotFoundException(`Ticket ${id} no encontrado`);
-    }
+    if (!ticket) throw new NotFoundException(`Ticket ${id} no encontrado`);
     return ticket;
   }
 }

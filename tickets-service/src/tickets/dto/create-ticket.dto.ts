@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
 
 export class CreateTicketDto {
   @IsString()
@@ -14,4 +14,9 @@ export class CreateTicketDto {
 
   @IsUUID('4', { message: 'El zonaId debe ser un UUID válido' })
   zonaId: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  idEmpleado?: string;
 }

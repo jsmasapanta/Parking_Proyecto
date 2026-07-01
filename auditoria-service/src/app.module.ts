@@ -3,8 +3,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { APP_GUARD } from '@nestjs/core';
-import { TicketsModule } from './tickets/tickets.module';
-import { Ticket } from './tickets/entities/ticket.entity';
+import { AuditoriaModule } from './auditoria/auditoria.module';
+import { EventoAuditoria } from './auditoria/entities/evento-auditoria.entity';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 
 @Module({
@@ -12,16 +12,15 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
+      useFactory: (config: ConfigService) => ({
         type: 'postgres',
-        host: configService.get<string>('DB_HOST'),
-        port: configService.get<number>('DB_PORT'),
-        username: configService.get<string>('DB_USUARIO'),
-        password: configService.get<string>('DB_CONTRASENA'),
-        database: configService.get<string>('DB_NOMBRE'),
-        entities: [Ticket],
+        host: config.get<string>('DB_HOST'),
+        port: config.get<number>('DB_PORT'),
+        username: config.get<string>('DB_USUARIO'),
+        password: config.get<string>('DB_CONTRASENA'),
+        database: config.get<string>('DB_NOMBRE'),
+        entities: [EventoAuditoria],
         synchronize: true,
-        logging: false,
       }),
       inject: [ConfigService],
     }),
@@ -29,14 +28,11 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: config.get<string>('JWT_EXPIRES_IN', '15m') },
       }),
       inject: [ConfigService],
     }),
-    TicketsModule,
+    AuditoriaModule,
   ],
-  providers: [
-    { provide: APP_GUARD, useClass: JwtAuthGuard },
-  ],
+  providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }],
 })
 export class AppModule {}

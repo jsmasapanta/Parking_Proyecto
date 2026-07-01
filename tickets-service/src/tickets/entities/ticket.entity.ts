@@ -8,7 +8,8 @@ import {
 
 export enum EstadoTicket {
   ABIERTO = 'ABIERTO',
-  CERRADO = 'CERRADO',
+  PAGADO = 'PAGADO',
+  ANULADO = 'ANULADO',
 }
 
 @Entity({ name: 'tickets' })
@@ -27,6 +28,9 @@ export class Ticket {
 
   @Column({ type: 'varchar', name: 'espacio_id', nullable: true })
   espacioId: string | null;
+
+  @Column({ type: 'varchar', name: 'id_empleado', nullable: true })
+  idEmpleado: string | null;
 
   @Column({ type: 'timestamp', name: 'hora_entrada' })
   horaEntrada: Date;

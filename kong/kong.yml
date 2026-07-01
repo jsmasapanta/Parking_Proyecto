@@ -72,6 +72,14 @@ services:
           - /api/asignaciones
         strip_path: true
 
+  - name: auditoria-service
+    url: http://host.docker.internal:3006/auditoria
+    routes:
+      - name: auditoria-route
+        paths:
+          - /api/auditoria
+        strip_path: true
+
 # ============================================================
 # Plugin CORS global: permite que el frontend React (localhost:5173,
 # servido por Vite) haga peticiones a Kong (localhost:8000) sin que
