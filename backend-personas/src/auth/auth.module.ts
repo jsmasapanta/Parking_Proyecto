@@ -13,9 +13,9 @@ import { Usuario } from '../personas/entities/usuario.entity';
     TypeOrmModule.forFeature([Usuario]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: (config: ConfigService) => ({
+      useFactory: (config: ConfigService): any => ({
         secret: config.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: config.get<string>('JWT_EXPIRES_IN', '15m') },
+        signOptions: { expiresIn: config.get('JWT_EXPIRES_IN', '15m') },
       }),
       inject: [ConfigService],
     }),

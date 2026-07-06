@@ -7,10 +7,10 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  const config = app.get(ConfigService);
+  const configService = app.get(ConfigService);
   const required = ['JWT_SECRET', 'JWT_REFRESH_SECRET'];
   for (const key of required) {
-    if (!config.get<string>(key)) {
+    if (!configService.get<string>(key)) {
       throw new Error(`Variable de entorno requerida no definida: ${key}`);
     }
   }
@@ -19,7 +19,7 @@ async function bootstrap() {
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }),
   );
 
-  const config = new DocumentBuilder()
+  const swaggerConfig = new DocumentBuilder()
     .setTitle('Personas API')
     .setDescription(
       'Microservicio de gestión de personas, usuarios y autenticación JWT. ' +
@@ -32,7 +32,7 @@ async function bootstrap() {
     .addBearerAuth()
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api/docs', app, document);
 
   await app.listen(3001);
